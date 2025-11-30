@@ -113,7 +113,7 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
         # Step 1: Sketch Extractor (ダミー)
         with st.status("📐 Step 1: Markush構造を抽出中...", expanded=True) as status:
             sketch_result = extract_markush_structure(patent_info)
-            st.markdown("**抽出結果 (ダミー - MarkushParser):**")
+            st.markdown("**抽出結果 (ダミー - MarkushParser + PDF Parser):**")
             st.markdown(f"**コアMarkush構造:**")
             st.code(sketch_result['core_markush_smiles'])
             st.markdown("**クレーム要件:**")
@@ -124,10 +124,32 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
         # Step 2: Substituents Matcher (ダミー)
         with st.status("🔗 Step 2: 置換基グループをマッチング中...", expanded=True) as status:
             matcher_result = match_substituents(query_molecule, sketch_result)
-            st.markdown("**R基マッピング結果 (ダミー - MarkushMatcher + RDKit):**")
+            
+            st.markdown("**並列処理結果:**")
+            
+            col_rdkit, col_nn = st.columns(2)
+            
+            with col_rdkit:
+                st.markdown("**🔧 RDKit (ルールベース):**")
+                rdkit_result = matcher_result.get("rdkit_result", {})
+                for key, value in rdkit_result.get("r_group_mapping", {}).items():
+                    st.markdown(f"- {key}: `{value}`")
+                st.caption(f"Confidence: {rdkit_result.get('confidence', 'N/A')}")
+            
+            with col_nn:
+                st.markdown("**🧠 MarkushMatcher (NN):**")
+                nn_result = matcher_result.get("nn_result", {})
+                for key, value in nn_result.get("r_group_mapping", {}).items():
+                    st.markdown(f"- {key}: `{value}`")
+                st.caption(f"Confidence: {nn_result.get('confidence', 'N/A')}")
+            
+            st.markdown("---")
+            st.markdown("**✅ 検証済み統合結果 (LLMによる検証):**")
             for key, value in matcher_result["r_group_mapping"].items():
                 st.markdown(f"- **{key}**: `{value}`")
+            
             st.markdown(f"**Tanimoto類似度:** {matcher_result['tanimoto_similarity']}")
+            st.caption(matcher_result.get("verification_notes", ""))
             status.update(label="✅ Step 2: 置換基マッチング完了", state="complete")
         
         # Step 3: Requirements Examinator
@@ -138,7 +160,7 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
                 matcher_result,
                 patent_info
             )
-            st.markdown("**評価結果 (Requirements Examinator):**")
+            st.markdown("**評価結果 (Requirements Examinator - LLM):**")
             st.markdown(examinator_result)
             status.update(label="✅ Step 3: 要件評価完了", state="complete")
         
@@ -152,8 +174,9 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
                 is_protected,
                 examinator_result
             )
-            st.markdown("**検証結果 (Fact Checker):**")
+            st.markdown("**検証結果 (Fact Checker - LLM):**")
             st.markdown(fact_check_result)
+            st.caption("※ Fact Checkerは推論の根拠が特許文書に存在するかを検証します（判定の正誤ではない）")
             status.update(label="✅ Step 4: 事実検証完了", state="complete")
         
         # Step 5: Planner - 最終レポート作成
@@ -166,7 +189,7 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
                 examinator_result,
                 fact_check_result
             )
-            st.markdown("**最終侵害レポート (Planner):**")
+            st.markdown("**最終侵害レポート (Planner - LLM):**")
             st.markdown(final_report)
             status.update(label="✅ Step 5: レポート作成完了", state="complete")
         
