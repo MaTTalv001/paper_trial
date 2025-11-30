@@ -31,7 +31,19 @@ def plan_and_coordinate(
     examinator_result: str,
     fact_check_result: str
 ) -> str:
-    """全エージェントの結果を統合して最終レポートを作成（非ストリーミング）"""
+    """全エージェントの結果を統合して最終レポートを作成
+    
+    Args:
+        query_molecule: クエリ分子のSMILES文字列
+        patent_info: 特許情報テキスト
+        sketch_result: Sketch Extractorの結果
+        matcher_result: Substituents Matcherの結果
+        examinator_result: Requirements Examinatorの結果
+        fact_check_result: Fact Checkerの結果
+    
+    Returns:
+        侵害レポート（Markdown形式の文字列）
+    """
     agent = create_planner_agent()
     
     prompt = f"""以下の情報に基づいて、特許侵害評価の最終レポートを作成してください:
@@ -40,7 +52,7 @@ def plan_and_coordinate(
 SMILES: {query_molecule}
 
 ## 特許情報
-{patent_info[:2000]}...
+{patent_info[:2000]}
 
 ## Sketch Extractor結果
 コアMarkush構造: {sketch_result.get('core_markush_smiles', 'N/A')}
@@ -51,65 +63,30 @@ R基マッピング: {matcher_result.get('r_group_mapping', {})}
 骨格マッチ: {matcher_result.get('skeleton_match', False)}
 
 ## Requirements Examinator結果
-{examinator_result}
+{examinator_result[:2000]}
 
 ## Fact Checker結果
-{fact_check_result}
-
-上記の全ての分析結果を統合し、包括的な侵害レポートを作成してください。
-"""
-    result = agent(prompt)
-    return str(result)
-
-async def plan_and_coordinate_stream(
-    query_molecule: str,
-    patent_info: str,
-    sketch_result: dict,
-    matcher_result: dict,
-    examinator_result: str,
-    fact_check_result: str
-):
-    """全エージェントの結果を統合して最終レポートを作成（ストリーミング）"""
-    agent = create_planner_agent()
-    
-    prompt = f"""以下の情報に基づいて、特許侵害評価の最終レポートを作成してください:
-
-## クエリ分子
-SMILES: {query_molecule}
-
-## 特許情報
-{patent_info[:2000]}...
-
-## Sketch Extractor結果
-コアMarkush構造: {sketch_result.get('core_markush_smiles', 'N/A')}
-クレーム要件: {sketch_result.get('claim_requirements', {})}
-
-## Substituents Matcher結果
-R基マッピング: {matcher_result.get('r_group_mapping', {})}
-骨格マッチ: {matcher_result.get('skeleton_match', False)}
-
-## Requirements Examinator結果
-{examinator_result}
-
-## Fact Checker結果
-{fact_check_result}
+{fact_check_result[:2000]}
 
 上記の全ての分析結果を統合し、包括的な侵害レポートをMarkdown形式で作成してください。
-以下の構成で出力してください:
 
 # 特許侵害評価レポート
 
 ## 1. クエリ分子の構造
+（SMILES形式と構造の説明）
+
 ## 2. 特許Markush構造とR基定義
+（コアMarkush構造と各R基の定義）
+
 ## 3. R基適合性分析
+（各R基の値と要件との比較）
+
 ## 4. 最終判定
+**INFRINGES** または **NOT_INFRINGES**
+
 ## 5. 判定理由
+（詳細な理由の説明）
 """
     
-    async for event in agent.stream_async(prompt):
-        if hasattr(event, 'data'):
-            yield event.data
-        elif isinstance(event, str):
-            yield event
-        elif hasattr(event, 'content'):
-            yield event.content
+    result = agent(prompt)
+    return str(result)

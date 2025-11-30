@@ -29,35 +29,17 @@ def examine_requirements(
     match_result: dict,
     claim_text: str
 ) -> str:
-    """置換基グループが特許要件を満たすか検証（非ストリーミング）"""
-    agent = create_examinator_agent()
-    r_group_mapping = match_result.get("r_group_mapping", {})
+    """置換基グループが特許要件を満たすか検証
     
-    prompt = f"""以下の情報に基づいて、クエリ分子が特許の保護範囲に含まれるか検証してください:
-
-**Markushクレーム**: '{markush_string}'
-
-**現在のサブ構造マッチング結果:**
-{r_group_mapping}
-
-**クエリ分子**:
-{molecule_string}
-
-**クレーム要件テキスト:**
-{claim_text}
-
-各R基について、クレーム要件との適合性を詳細に分析し、最終的な判定を提供してください。
-"""
-    result = agent(prompt)
-    return str(result)
-
-async def examine_requirements_stream(
-    markush_string: str,
-    molecule_string: str,
-    match_result: dict,
-    claim_text: str
-):
-    """置換基グループが特許要件を満たすか検証（ストリーミング）"""
+    Args:
+        markush_string: Markush構造の拡張SMILES文字列
+        molecule_string: クエリ分子のSMILES文字列
+        match_result: Substituents Matcherからのマッチング結果
+        claim_text: 特許クレームテキスト
+    
+    Returns:
+        検証結果（Markdown形式の文字列）
+    """
     agent = create_examinator_agent()
     r_group_mapping = match_result.get("r_group_mapping", {})
     
@@ -76,12 +58,18 @@ async def examine_requirements_stream(
 
 各R基について、クレーム要件との適合性を詳細に分析し、最終的な判定を提供してください。
 出力はMarkdown形式で、見出しや箇条書きを使って読みやすく整形してください。
+
+## 分析結果
+
+### R基適合性チェック
+（各R基について分析）
+
+### 最終判定
+（PROTECTED または NOT PROTECTED）
+
+### 判定理由
+（詳細な理由）
 """
     
-    async for event in agent.stream_async(prompt):
-        if hasattr(event, 'data'):
-            yield event.data
-        elif isinstance(event, str):
-            yield event
-        elif hasattr(event, 'content'):
-            yield event.content
+    result = agent(prompt)
+    return str(result)
