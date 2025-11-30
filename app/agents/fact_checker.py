@@ -29,17 +29,7 @@ def check_facts(
     input_is_protected: bool,
     input_reasoning: str
 ) -> str:
-    """各エージェントの出力を検証
-    
-    Args:
-        target_smiles: 対象分子のSMILES文字列
-        block_text: 特許PDFブロックテキスト
-        input_is_protected: 侵害判定結果
-        input_reasoning: 分析推論
-    
-    Returns:
-        検証結果（JSON形式の文字列）
-    """
+    """各エージェントの出力を検証（非ストリーミング）"""
     agent = create_fact_checker_agent()
     
     prompt = f"""以下の情報に基づいて、侵害分析の推論を検証してください:
@@ -59,3 +49,37 @@ def check_facts(
 """
     result = agent(prompt)
     return str(result)
+
+async def check_facts_stream(
+    target_smiles: str,
+    block_text: str,
+    input_is_protected: bool,
+    input_reasoning: str
+):
+    """各エージェントの出力を検証（ストリーミング）"""
+    agent = create_fact_checker_agent()
+    
+    prompt = f"""以下の情報に基づいて、侵害分析の推論を検証してください:
+
+# 対象分子:
+{target_smiles}
+
+# 特許PDFブロック:
+{block_text}
+
+# 侵害分析結果:
+侵害: {"保護されている" if input_is_protected else "保護されていない"}
+
+分析: {input_reasoning}
+
+上記の分析で使用されたすべての証拠が特許文書に記載されていることを確認してください。
+出力はMarkdown形式で、見出しや箇条書きを使って読みやすく整形してください。
+"""
+    
+    async for event in agent.stream_async(prompt):
+        if hasattr(event, 'data'):
+            yield event.data
+        elif isinstance(event, str):
+            yield event
+        elif hasattr(event, 'content'):
+            yield event.content

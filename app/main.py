@@ -3,15 +3,16 @@
 論文再現: Intelligent System for Automated Molecular Patent Infringement Assessment
 (arXiv:2412.07819v2)
 """
+import asyncio
 import streamlit as st
 from dotenv import load_dotenv
 
 from agents import (
-    plan_and_coordinate,
+    plan_and_coordinate_stream,
     extract_markush_structure,
     match_substituents,
-    examine_requirements,
-    check_facts
+    examine_requirements_stream,
+    check_facts_stream
 )
 from sample_data import (
     SAMPLE_QUERY_MOLECULE,
@@ -47,10 +48,6 @@ with st.sidebar:
     - MarkushMatcher (T5ベース)
     - MarkushParser (Swin Transformer + BART)
     - RDKit Substructure Matcher
-    
-    **論文の設定:**
-    - Requirements Examinator: OpenAI-o1 (temp=1.0)
-    - その他: GPT-4o (temp=0.2)
     """)
     
     st.divider()
@@ -104,9 +101,24 @@ with col2:
     if "patent_info" in st.session_state:
         patent_info = st.session_state.patent_info
         with st.expander("特許クレームを表示", expanded=False):
-            st.code(patent_info, language="markdown")
+            st.markdown(patent_info)
 
 st.divider()
+
+
+async def run_streaming_agent(generator, placeholder):
+    """ストリーミングエージェントを実行し、結果を収集"""
+    full_response = ""
+    try:
+        async for chunk in generator:
+            if chunk:
+                full_response += str(chunk)
+                placeholder.markdown(full_response)
+    except Exception as e:
+        st.error(f"ストリーミングエラー: {e}")
+        full_response = f"エラー: {e}"
+    return full_response
+
 
 if st.button("🔍 特許侵害評価を開始", type="primary", use_container_width=True):
     if not query_molecule or not query_molecule.strip():
@@ -118,56 +130,78 @@ if st.button("🔍 特許侵害評価を開始", type="primary", use_container_w
         with st.status("📐 Step 1: Markush構造を抽出中...", expanded=True) as status:
             sketch_result = extract_markush_structure(patent_info)
             st.markdown("**抽出結果 (ダミー - MarkushParser):**")
-            st.markdown(f"**コアMarkush構造:** `{sketch_result['core_markush_smiles']}`")
-            st.json(sketch_result["claim_requirements"])
+            st.markdown(f"**コアMarkush構造:**")
+            st.code(sketch_result['core_markush_smiles'])
+            st.markdown("**クレーム要件:**")
+            for key, value in sketch_result["claim_requirements"].items():
+                st.markdown(f"- **{key}**: {value}")
             status.update(label="✅ Step 1: Markush構造抽出完了", state="complete")
         
         # Step 2: Substituents Matcher (ダミー)
         with st.status("🔗 Step 2: 置換基グループをマッチング中...", expanded=True) as status:
             matcher_result = match_substituents(query_molecule, sketch_result)
             st.markdown("**R基マッピング結果 (ダミー - MarkushMatcher + RDKit):**")
-            st.json(matcher_result["r_group_mapping"])
+            for key, value in matcher_result["r_group_mapping"].items():
+                st.markdown(f"- **{key}**: `{value}`")
             st.markdown(f"**Tanimoto類似度:** {matcher_result['tanimoto_similarity']}")
             status.update(label="✅ Step 2: 置換基マッチング完了", state="complete")
         
-        # Step 3: Requirements Examinator
+        # Step 3: Requirements Examinator (ストリーミング)
         with st.status("🔬 Step 3: 要件適合性を評価中...", expanded=True) as status:
-            examinator_result = examine_requirements(
-                sketch_result["core_markush_smiles"],
-                query_molecule,
-                matcher_result,
-                patent_info
-            )
             st.markdown("**評価結果 (Requirements Examinator):**")
-            st.code(examinator_result, language="json")
+            examinator_placeholder = st.empty()
+            
+            examinator_result = asyncio.run(
+                run_streaming_agent(
+                    examine_requirements_stream(
+                        sketch_result["core_markush_smiles"],
+                        query_molecule,
+                        matcher_result,
+                        patent_info
+                    ),
+                    examinator_placeholder
+                )
+            )
             status.update(label="✅ Step 3: 要件評価完了", state="complete")
         
-        # Step 4: Fact Checker
+        # Step 4: Fact Checker (ストリーミング)
         with st.status("✅ Step 4: 出力を検証中...", expanded=True) as status:
-            # 仮の判定結果を抽出
-            is_protected = "not_protected" not in examinator_result.lower() and "not protected" not in examinator_result.lower()
-            fact_check_result = check_facts(
-                query_molecule,
-                patent_info,
-                is_protected,
-                examinator_result
-            )
             st.markdown("**検証結果 (Fact Checker):**")
-            st.code(fact_check_result, language="json")
+            fact_check_placeholder = st.empty()
+            
+            is_protected = "not_protected" not in examinator_result.lower() and "not protected" not in examinator_result.lower() and "保護されていない" not in examinator_result
+            
+            fact_check_result = asyncio.run(
+                run_streaming_agent(
+                    check_facts_stream(
+                        query_molecule,
+                        patent_info,
+                        is_protected,
+                        examinator_result
+                    ),
+                    fact_check_placeholder
+                )
+            )
             status.update(label="✅ Step 4: 事実検証完了", state="complete")
         
-        # Step 5: Planner - 最終レポート作成
+        # Step 5: Planner - 最終レポート作成 (ストリーミング)
         with st.status("🎯 Step 5: 侵害レポートを作成中...", expanded=True) as status:
-            final_report = plan_and_coordinate(
-                query_molecule,
-                patent_info,
-                sketch_result,
-                matcher_result,
-                examinator_result,
-                fact_check_result
-            )
             st.markdown("**最終侵害レポート (Planner):**")
-            st.code(final_report, language="json")
+            planner_placeholder = st.empty()
+            
+            final_report = asyncio.run(
+                run_streaming_agent(
+                    plan_and_coordinate_stream(
+                        query_molecule,
+                        patent_info,
+                        sketch_result,
+                        matcher_result,
+                        examinator_result,
+                        fact_check_result
+                    ),
+                    planner_placeholder
+                )
+            )
             status.update(label="✅ Step 5: レポート作成完了", state="complete")
         
         st.success("特許侵害評価が完了しました!")
@@ -179,6 +213,6 @@ st.markdown("""
 <div style="text-align: center; color: gray; font-size: 0.8em;">
 PatentFinder - 論文再現実装 (arXiv:2412.07819v2)<br>
 Sketch Extractor / Substituents Matcher: ダミー実装（MarkushParser, MarkushMatcher, RDKitは別途技術検証済み）<br>
-Planner / Requirements Examinator / Fact Checker: Strands Agentで実装
+Planner / Requirements Examinator / Fact Checker: Strands Agentで実装（ストリーミング対応）
 </div>
 """, unsafe_allow_html=True)
