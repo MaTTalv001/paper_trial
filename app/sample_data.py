@@ -3,7 +3,7 @@
 # サンプルクエリ分子（論文Figure 2より - NOT PROTECTED）
 SAMPLE_QUERY_MOLECULE = "c1ccc([C@]2(CCNCc3ccnnc3)CCOC3(CCCC3)C2)nc1"
 
-# サンプル特許クレーム（論文Appendix Cに基づく実際の特許クレーム形式）
+# サンプル特許クレーム（論文Appendix Cに基づく - デューテリウム条件を削除してシンプル化）
 SAMPLE_PATENT_CLAIM = """
 Claims (36)
 -----------
@@ -19,8 +19,7 @@ or a pharmaceutically acceptable salt thereof, wherein:
 - R21 and R22 are independently H or CH3;
 - D1 is an optionally substituted aryl;
 - B3 is H or optionally substituted alkyl; and
-- B5 is an optionally substituted thiophenyl,
-wherein a hydrogen is replaced with a deuterium.
+- B5 is an optionally substituted thiophenyl.
 
 2. The compound of claim 1, or a pharmaceutically acceptable salt thereof, wherein D1 is an optionally substituted phenyl or an optionally substituted pyridyl.
 
@@ -71,10 +70,10 @@ wherein R23, R24, and R30 are each independently H, OH, cycle, aryl, branched or
 Core Markush Structure (Formula IX):
 *CN(*)CCC1(*)CC(*)(*)OC2(CCCC2)C1<sep><a>0:B[5]</a><a>3:B[3]</a><a>7:D[1]</a><a>10:R[21]</a><a>11:R[22]</a>
 
-R-Group Definitions (from Google Patent Database):
+R-Group Definitions:
 - B[5]: optionally substituted thiophenyl (任意に置換されたチオフェニル)
-  - Allowed: *c1cccs1, *c1ccsc1 (thiophene derivatives)
-  - NOT allowed: pyridazinyl, pyridinyl, or other heteroaryl groups
+  - Allowed: *c1cccs1, *c1ccsc1 (thiophene derivatives containing sulfur)
+  - NOT allowed: pyridazinyl, pyridinyl, or other heteroaryl groups without sulfur
 - B[3]: H or optionally substituted alkyl (Hまたは任意に置換されたアルキル)
 - D[1]: optionally substituted aryl (任意に置換されたアリール)
   - Includes: phenyl, pyridyl (2-pyridyl specifically mentioned in claim 4)
@@ -83,41 +82,9 @@ R-Group Definitions (from Google Patent Database):
 
 ---
 
-Example Analysis (from paper Figure 2):
-
-Query Molecule: c1ccc([C@]2(CCNCc3ccnnc3)CCOC3(CCCC3)C2)nc1
-
-R-Group Mapping Extracted by Chemical Software:
-{
-    "B5": "c1ccnnc1",    // Pyridazine ring (ピリダジン環)
-    "B3": "[H][H]",      // Hydrogen (水素)
-    "D1": "c1ccccn1",    // Pyridine ring (ピリジン環)
-    "R21": "[H][H]",     // Hydrogen (水素)
-    "R22": "[H][H]"      // Hydrogen (水素)
-}
-
-Analysis Result:
-- B5 (Atom Index 0): Pyridazinyl (c1ccnnc1)
-  - Definition in Claims: "an optionally substituted thiophenyl"
-  - Assessment: Pyridazinyl is a six-membered aromatic ring containing two adjacent nitrogen atoms.
-    Thiophenyl refers to a five-membered aromatic ring containing a sulfur atom (thiophene).
-    The pyridazinyl group is structurally and functionally different from the thiophenyl group.
-  - Conclusion: **Does NOT align with the claim requirements**
-
-- B3 (Atom Index 3): Hydrogen ([H][H])
-  - Definition in Claims: "H or optionally substituted alkyl"
-  - Conclusion: **Aligns with the claim requirements**
-
-- D1 (Atom Index 7): Pyridyl (c1ccccn1)
-  - Definition in Claims: "an optionally substituted aryl" (Claims 2-4 specify pyridyl)
-  - Conclusion: **Aligns with the claim requirements**
-
-- R21 and R22 (Atom Indices 10 and 11): Both Hydrogen ([H][H])
-  - Definition in Claims: "independently H or CH3"
-  - Conclusion: **Align with the claim requirements**
-
-Final Prediction: **NOT PROTECTED**
-Reason: The B5 substituent (pyridazinyl) does not meet the specific definitions provided for B5 in the claims (must be thiophenyl).
+判定基準:
+- B5がthiophenyl（硫黄含有5員環）であれば → PROTECTED
+- B5がpyridazinyl（窒素含有6員環）など、thiophenyl以外であれば → NOT PROTECTED
 """
 
 # 拡張SMILES形式の説明
@@ -147,7 +114,8 @@ PatentFinderでは、Markush構造を表現するために拡張SMILES形式を�
 ### R基マッピング例:
 ```json
 {
-    "B5": "c1ccnnc1",    // Pyridazine ring
+    "B5": "c1ccnnc1",    // Pyridazine ring (NOT thiophenyl → NOT PROTECTED)
+    "B5": "c1cccs1",     // Thiophene ring (thiophenyl → PROTECTED)
     "B3": "[H][H]",      // Hydrogen
     "D1": "c1ccccn1",    // Pyridine ring
     "R21": "[H][H]",     // Hydrogen
@@ -161,6 +129,6 @@ PatentFinderでは、Markush構造を表現するために拡張SMILES形式を�
 - 各エージェント: R基の値の検証と分析
 """
 
-# 保護される分子の例（論文より）
+# 保護される分子の例（論文より）- B5がthiophenyl
 SAMPLE_PROTECTED_MOLECULE = "c1ccc([C@]2(CCNCc3cccs3)CCOC3(CCCC3)C2)nc1"
 # B5 = thiophenyl (c1cccs1) ✓ - これは保護される
