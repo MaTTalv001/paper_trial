@@ -17,22 +17,33 @@ def rdkit_substructure_match(query_molecule: str, markush_structure: dict) -> di
     実際の実装では:
     - RDKitを使用してMarkush骨格とクエリ分子をマッチング
     - 各R基の接続点から置換基を抽出
-    
-    論文より: ルールベースアルゴリズムは単純な置換基には有効だが、
-    複雑なケースでは失敗することがある（Accuracy ≈ 0%）
     """
+    # クエリ分子からB5の値を判定（ダミー実装）
+    if "cccs" in query_molecule or "ccsc" in query_molecule:
+        # thiophenyl（硫黄含有）→ PROTECTED
+        b5_value = "c1cccs1"
+        b5_desc = "Thiophene ring"
+    elif "ccnnc" in query_molecule:
+        # pyridazinyl（窒素含有）→ NOT PROTECTED
+        b5_value = "c1ccnnc1"
+        b5_desc = "Pyridazine ring"
+    else:
+        b5_value = "unknown"
+        b5_desc = "Unknown substituent"
+    
     return {
         "method": "RDKit Substructure Matcher",
         "skeleton_match": True,
         "r_group_mapping": {
-            "B5": "c1ccnnc1",      # Pyridazine ring
-            "B3": "[H][H]",        # Hydrogen
-            "D1": "c1ccccn1",      # Pyridine ring
-            "R21": "[H][H]",       # Hydrogen
-            "R22": "[H][H]"        # Hydrogen
+            "B5": b5_value,
+            "B3": "[H][H]",
+            "D1": "c1ccccn1",
+            "R21": "[H][H]",
+            "R22": "[H][H]"
         },
+        "b5_description": b5_desc,
         "confidence": 0.6,
-        "notes": "ルールベースマッチング完了。複雑な置換基では精度が低下する可能性あり。"
+        "notes": "ルールベースマッチング完了。"
     }
 
 
@@ -44,21 +55,31 @@ def markush_matcher_nn(query_molecule: str, markush_structure: dict) -> dict:
     - T5ベースモデル（MolT5-largeで初期化）
     - 入力: 分子SMILES + Markush構造
     - 出力: R基マッピング（JSON形式）
-    
-    論文より: Accuracy 66.8%, Tanimoto Similarity 92.9%
     """
+    # クエリ分子からB5の値を判定（ダミー実装）
+    if "cccs" in query_molecule or "ccsc" in query_molecule:
+        b5_value = "C1=CC=CS1"  # NNモデルの出力形式
+        b5_desc = "Thiophene ring"
+    elif "ccnnc" in query_molecule:
+        b5_value = "CC1C=NN=CC=1"
+        b5_desc = "Pyridazine ring"
+    else:
+        b5_value = "unknown"
+        b5_desc = "Unknown substituent"
+    
     return {
         "method": "MarkushMatcher (Neural Network)",
         "skeleton_match": True,
         "r_group_mapping": {
-            "B5": "CC1C=NN=CC=1",   # NNモデルの出力（やや異なる表記）
-            "B3": "[H]",            # Hydrogen
-            "D1": "C1N=CC=CC=1",    # Pyridine（異なる表記）
-            "R21": "[H]",           # Hydrogen
-            "R22": "[H]"            # Hydrogen
+            "B5": b5_value,
+            "B3": "[H]",
+            "D1": "C1N=CC=CC=1",
+            "R21": "[H]",
+            "R22": "[H]"
         },
+        "b5_description": b5_desc,
         "confidence": 0.85,
-        "notes": "ニューラルネットワークによる予測。交換可能グループや隣接グループでは曖昧さが残る可能性あり。"
+        "notes": "ニューラルネットワークによる予測。"
     }
 
 
@@ -69,13 +90,6 @@ def match_substituents(query_molecule: str, markush_structure: dict) -> dict:
     1. RDKitでルールベースマッチング
     2. MarkushMatcherでNNベースマッチング
     3. 両結果を統合（実際はLLMエージェントが検証・統合）
-    
-    Args:
-        query_molecule: クエリ分子のSMILES文字列
-        markush_structure: Sketch Extractorからの出力
-    
-    Returns:
-        統合されたマッチング結果
     """
     # Step 1: RDKitによるルールベースマッチング
     rdkit_result = rdkit_substructure_match(query_molecule, markush_structure)
@@ -83,21 +97,28 @@ def match_substituents(query_molecule: str, markush_structure: dict) -> dict:
     # Step 2: MarkushMatcherによるNNベースマッチング
     nn_result = markush_matcher_nn(query_molecule, markush_structure)
     
-    # Step 3: 結果の統合（実際はLLMエージェントが行う）
-    # 論文では、両方の結果をLLMに渡して検証・修正・統合する
-    
-    # 統合ロジック（ダミー）:
-    # - 両方が一致 → そのまま採用
-    # - 不一致 → NNの結果を優先（精度が高いため）、ただしRDKitの結果も参照
-    
+    # Step 3: 結果の統合
     verified_mapping = {}
     for key in rdkit_result["r_group_mapping"]:
         rdkit_value = rdkit_result["r_group_mapping"].get(key, "")
-        nn_value = nn_result["r_group_mapping"].get(key, "")
-        
-        # 正規化して比較（実際はLLMが化学的等価性を判断）
-        # ここではRDKitの結果を採用（より標準的なSMILES表記のため）
         verified_mapping[key] = rdkit_value
+    
+    # B5の値に基づいて説明を設定
+    if "cccs" in query_molecule or "ccsc" in query_molecule:
+        b5_verified = "c1cccs1"
+        b5_nn = "C1=CC=CS1"
+        b5_desc = "Thiophene ring（チオフェン環）- 硫黄含有5員環"
+        b5_status = "両手法で一致（thiophenyl）"
+    elif "ccnnc" in query_molecule:
+        b5_verified = "c1ccnnc1"
+        b5_nn = "CC1C=NN=CC=1"
+        b5_desc = "Pyridazine ring（ピリダジン環）- 窒素含有6員環"
+        b5_status = "両手法で一致（pyridazinyl）"
+    else:
+        b5_verified = "unknown"
+        b5_nn = "unknown"
+        b5_desc = "Unknown substituent"
+        b5_status = "不明"
     
     return {
         "query_molecule": query_molecule,
@@ -116,11 +137,11 @@ def match_substituents(query_molecule: str, markush_structure: dict) -> dict:
             {
                 "group_id": "B[5]",
                 "atom_index": 0,
-                "rdkit_value": "c1ccnnc1",
-                "nn_value": "CC1C=NN=CC=1",
-                "verified_value": "c1ccnnc1",
-                "description": "Pyridazine ring（ピリダジン環）",
-                "match_status": "両手法で一致（表記の違いのみ）"
+                "rdkit_value": b5_verified,
+                "nn_value": b5_nn,
+                "verified_value": b5_verified,
+                "description": b5_desc,
+                "match_status": b5_status
             },
             {
                 "group_id": "B[3]",
@@ -161,6 +182,6 @@ def match_substituents(query_molecule: str, markush_structure: dict) -> dict:
         ],
         
         "tanimoto_similarity": 0.929,
-        "verification_notes": "RDKitとMarkushMatcherの両結果を比較検証。表記の違いはあるが、化学的に等価な構造として確認。",
+        "verification_notes": f"RDKitとMarkushMatcherの両結果を比較検証。B5 = {b5_desc}",
         "status": "dummy_matched"
     }
